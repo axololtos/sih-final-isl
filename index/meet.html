@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <style>
+        #root {
+            width: 100vw;
+            height: 100vh;
+        }
+        #textDisplay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <div id="textDisplay"></div>
+    <canvas id="canvas"></canvas>
+
+    <!-- ZEGOCLOUD UIkit for video conferencing -->
+    <script src="https://unpkg.com/@zegocloud/zego-uikit-prebuilt/zego-uikit-prebuilt.js"></script>
+
+    <!-- Import MediaPipe and OpenCV for Hand Gesture Recognition -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+    <script>
+        window.onload = function () {
+            function getUrlParams(url) {
+                let urlStr = url.split('?')[1];
+                const urlSearchParams = new URLSearchParams(urlStr);
+                const result = Object.fromEntries(urlSearchParams.entries());
+                return result;
+            }
+
+            const roomID = getUrlParams(window.location.href)['roomID'] || (Math.floor(Math.random() * 10000) + "");
+            const userID = Math.floor(Math.random() * 10000) + "";
+            const userName = "userName" + userID;
+            const appID = 2025643112;
+            const serverSecret = "741eb00ca2a18b3058739df397fa39e7";
+            const kitToken = ZegoUIKitPrebuilt.generateKitTokenForTest(appID, serverSecret, roomID, userID, userName);
+
+            const zp = ZegoUIKitPrebuilt.create(kitToken);
+            zp.joinRoom({
+                container: document.querySelector("#root"),
+                sharedLinks: [{
+                    name: 'Personal link',
+                    url: window.location.protocol + '//' + window.location.host + window.location.pathname + '?roomID=' + roomID,
+                }],
+                scenario: {
+                    mode: ZegoUIKitPrebuilt.VideoConference,
+                },
+                turnOnMicrophoneWhenJoining: true,
+                turnOnCameraWhenJoining: true,
+                showMyCameraToggleButton: true,
+                showMyMicrophoneToggleButton: true,
+                showAudioVideoSettingsButton: true,
+                showScreenSharingButton: true,
+                showTextChat: true,
+                showUserList: true,
+                maxUsers: 50,
+                layout: "Auto",
+                showLayoutButton: true,
+            });
+
+            // Start hand gesture recognition
+            startHandRecognition();
+        };
+
+        // Function to start hand gesture recognition using MediaPipe
+        function startHandRecognition() {
+            const videoElement = document.createElement('video');
+            videoElement.style.display = 'none';
+            document.body.appendChild(videoElement);
+            
+            const canvasElement = document.getElementById('canvas');
+            const canvasCtx = canvasElement.getContext('2d');
+            const textDisplay = document.getElementById('textDisplay');
+
+            // Initialize MediaPipe Hands solution
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+            });
+            
+            hands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            hands.onResults(onResults);
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({ image: videoElement });
+                },
+                width: 640,
+                height: 480,
+            });
+            camera.start();
+
+            // Function to process hand gestures
+            function onResults(results) {
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const handLandmarks = results.multiHandLandmarks[0];
+
+                    // Use landmarks to recognize sign language (this is where gesture recognition logic goes)
+                    const recognizedGesture = recognizeSign(handLandmarks);
+                    if (recognizedGesture) {
+                        textDisplay.innerText = recognizedGesture;
+                    }
+
+                    // Draw hand landmarks
+                    for (const landmarks of results.multiHandLandmarks) {
+                        drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 5 });
+                        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2 });
+                    }
+                }
+
+                canvasCtx.restore();
+            }
+
+            // Simple gesture recognition logic (this should be replaced with an ML model for actual sign language recognition)
+            function recognizeSign(handLandmarks) {
+                // For demonstration purposes, we'll just return 'Hello' if the hand is open (all fingers extended)
+                const thumbTip = handLandmarks[4];
+                const indexTip = handLandmarks[8];
+                const middleTip = handLandmarks[12];
+                const ringTip = handLandmarks[16];
+                const pinkyTip = handLandmarks[20];
+
+                // If all fingers are extended (rough check), return "Hello"
+                if (thumbTip.y < handLandmarks[2].y && indexTip.y < handLandmarks[6].y &&
+                    middleTip.y < handLandmarks[10].y && ringTip.y < handLandmarks[14].y &&
+                    pinkyTip.y < handLandmarks[18].y) {
+                    return "Hello";
+                }
+
+                return null; // No recognized sign
+            }
+        }
+    </script>
+</body>
+</html>
